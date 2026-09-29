@@ -1,0 +1,21 @@
+{
+    "id": "dmsProjector",
+    "name": "DMS Projector",
+    "capabilities": ["dankbar-widget"],
+    "category": "utilities",
+    "repo": "https://github.com/osvaldx/dms-projector",
+    "author": "osvaldx",
+    "description": "Quick display projection and screen mirroring flyout for DankMaterialShell (inspired by Win+P).",
+    "dependencies": [],
+    "compositors": ["any"],
+    "distro": ["any"],
+    "version": "1.0.0",
+    "type": "widget",
+    "icon": "screen_share",
+    "component": "./DmsProjectorWidget.qml",
+    "settings": "./DmsProjectorSettings.qml",
+    "permissions": [
+        "settings_read",
+        "settings_write"
+    ]
+}
