@@ -48,6 +48,8 @@ PluginSettings {
             "optAbove": "Arriba",
             "optBelow": "Abajo",
             "behaviorHeader": "Comportamiento",
+            "autoKeybindLabel": "Atajo Global Automático (Win + P)",
+            "autoKeybindDesc": "Configura automáticamente la combinación Super + P en Hyprland / Niri / Sway.",
             "showNotificationsLabel": "Mostrar Notificaciones",
             "showNotificationsDesc": "Muestra una notificación OSD al cambiar el modo de proyección.",
             "hideWhenNoExternalLabel": "Ocultar si no hay pantalla externa",
@@ -71,6 +73,8 @@ PluginSettings {
             "optAbove": "Above",
             "optBelow": "Below",
             "behaviorHeader": "Behavior",
+            "autoKeybindLabel": "Automatic Global Shortcut (Win + P)",
+            "autoKeybindDesc": "Automatically bind Super + P in Hyprland / Niri / Sway upon installation.",
             "showNotificationsLabel": "Show Notifications",
             "showNotificationsDesc": "Display a system notification when changing projection mode.",
             "hideWhenNoExternalLabel": "Hide when no external display",
@@ -156,6 +160,13 @@ PluginSettings {
         font.pixelSize: Theme.fontSizeMedium
         font.weight: Font.Medium
         color: Theme.surfaceText
+    }
+
+    ToggleSetting {
+        settingKey: "autoKeybind"
+        label: root.t("autoKeybindLabel")
+        description: root.t("autoKeybindDesc")
+        defaultValue: true
     }
 
     ToggleSetting {

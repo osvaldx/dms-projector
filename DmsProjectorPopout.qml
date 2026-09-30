@@ -59,15 +59,14 @@ PopoutComponent {
         : root.t("subtitleSingle")
     showCloseButton: true
 
-    ColumnLayout {
+    Column {
         id: mainLayout
-        width: parent.width - Theme.spacingS * 2
-        anchors.horizontalCenter: parent.horizontalCenter
-        spacing: Theme.spacingM
+        width: parent.width
+        spacing: Theme.spacingS
 
         // Warning banner when no external display is plugged in
         Rectangle {
-            Layout.fillWidth: true
+            width: parent.width
             visible: !(root.widget && root.widget.hasExternalMonitor)
             height: bannerRow.implicitHeight + Theme.spacingS * 2
             radius: Theme.cornerRadius
@@ -99,7 +98,7 @@ PopoutComponent {
 
         // List of Projection Modes (Cards)
         Column {
-            Layout.fillWidth: true
+            width: parent.width
             spacing: Theme.spacingS
 
             // Option 1: PC Screen Only
@@ -116,16 +115,6 @@ PopoutComponent {
 
                 Behavior on color { ColorAnimation { duration: 150 } }
                 Behavior on border.color { ColorAnimation { duration: 150 } }
-
-                MouseArea {
-                    id: mousePcOnly
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (root.widget) root.widget.applyMode("internal");
-                    }
-                }
 
                 RowLayout {
                     anchors.fill: parent
@@ -183,6 +172,17 @@ PopoutComponent {
                         }
                     }
                 }
+
+                MouseArea {
+                    id: mousePcOnly
+                    anchors.fill: parent
+                    z: 10
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (root.widget) root.widget.applyMode("internal");
+                    }
+                }
             }
 
             // Option 2: Duplicate / Mirror
@@ -200,16 +200,6 @@ PopoutComponent {
 
                 Behavior on color { ColorAnimation { duration: 150 } }
                 Behavior on border.color { ColorAnimation { duration: 150 } }
-
-                MouseArea {
-                    id: mouseMirror
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: (root.widget && root.widget.hasExternalMonitor) ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: {
-                        if (root.widget) root.widget.applyMode("mirror");
-                    }
-                }
 
                 RowLayout {
                     anchors.fill: parent
@@ -267,6 +257,17 @@ PopoutComponent {
                         }
                     }
                 }
+
+                MouseArea {
+                    id: mouseMirror
+                    anchors.fill: parent
+                    z: 10
+                    hoverEnabled: true
+                    cursorShape: (root.widget && root.widget.hasExternalMonitor) ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: {
+                        if (root.widget && root.widget.hasExternalMonitor) root.widget.applyMode("mirror");
+                    }
+                }
             }
 
             // Option 3: Extend
@@ -284,16 +285,6 @@ PopoutComponent {
 
                 Behavior on color { ColorAnimation { duration: 150 } }
                 Behavior on border.color { ColorAnimation { duration: 150 } }
-
-                MouseArea {
-                    id: mouseExtend
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: (root.widget && root.widget.hasExternalMonitor) ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: {
-                        if (root.widget) root.widget.applyMode("extend");
-                    }
-                }
 
                 RowLayout {
                     anchors.fill: parent
@@ -351,6 +342,17 @@ PopoutComponent {
                         }
                     }
                 }
+
+                MouseArea {
+                    id: mouseExtend
+                    anchors.fill: parent
+                    z: 10
+                    hoverEnabled: true
+                    cursorShape: (root.widget && root.widget.hasExternalMonitor) ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: {
+                        if (root.widget && root.widget.hasExternalMonitor) root.widget.applyMode("extend");
+                    }
+                }
             }
 
             // Option 4: Second Screen Only
@@ -368,16 +370,6 @@ PopoutComponent {
 
                 Behavior on color { ColorAnimation { duration: 150 } }
                 Behavior on border.color { ColorAnimation { duration: 150 } }
-
-                MouseArea {
-                    id: mouseSecondOnly
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: (root.widget && root.widget.hasExternalMonitor) ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: {
-                        if (root.widget) root.widget.applyMode("external");
-                    }
-                }
 
                 RowLayout {
                     anchors.fill: parent
@@ -435,12 +427,23 @@ PopoutComponent {
                         }
                     }
                 }
+
+                MouseArea {
+                    id: mouseSecondOnly
+                    anchors.fill: parent
+                    z: 10
+                    hoverEnabled: true
+                    cursorShape: (root.widget && root.widget.hasExternalMonitor) ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: {
+                        if (root.widget && root.widget.hasExternalMonitor) root.widget.applyMode("external");
+                    }
+                }
             }
         }
 
         // Bottom Info Bar & Refresh Button
         Rectangle {
-            Layout.fillWidth: true
+            width: parent.width
             height: 36
             radius: Theme.cornerRadius
             color: Theme.surfaceContainerHigh

@@ -25,6 +25,7 @@ PluginComponent {
     property bool hideWhenNoExternal: false
     property string customInternal: ""
     property string customExternal: ""
+    property bool autoKeybind: true
 
     // --- IPC Handler for CLI and Keyboard Shortcuts (Win + P) ---
     IpcHandler {
@@ -56,11 +57,53 @@ PluginComponent {
     // Visibility in DankBar
     visible: !(hideWhenNoExternal && !hasExternalMonitor)
 
+    // --- Process for Auto-Configuring Keybind ---
+    Process {
+        id: keybindSetupProcess
+    }
+
+    function autoRegisterKeybind() {
+        if (!pluginService || !autoKeybind)
+            return;
+        var alreadyDone = pluginService.loadPluginData(root.pluginId, "autoKeybindConfigured", false);
+        if (alreadyDone)
+            return;
+
+        // Auto configure Win+P for any user installing the plugin across supported compositors
+        var setupScript = 'DESKTOP="$(echo $XDG_CURRENT_DESKTOP | tr "[:upper:]" "[:lower:]")"; ' +
+                          'if [ "$DESKTOP" = "niri" ]; then ' +
+                          '  dms keybinds set niri "Mod+P" "dms ipc call widget toggle dmsProjector" --desc "Project Display (Win+P)" 2>/dev/null; ' +
+                          'elif [ "$DESKTOP" = "sway" ]; then ' +
+                          '  dms keybinds set sway "Mod4+p" "dms ipc call widget toggle dmsProjector" --desc "Project Display (Win+P)" 2>/dev/null; ' +
+                          'else ' +
+                          '  dms keybinds set hyprland "SUPER + P" "dms ipc call widget toggle dmsProjector" --desc "Project Display (Win+P)" 2>/dev/null; ' +
+                          'fi';
+
+        keybindSetupProcess.exec(["bash", "-c", setupScript]);
+        pluginService.savePluginData(root.pluginId, "autoKeybindConfigured", true);
+    }
+
+    function removeKeybind() {
+        var removeScript = 'DESKTOP="$(echo $XDG_CURRENT_DESKTOP | tr "[:upper:]" "[:lower:]")"; ' +
+                           'if [ "$DESKTOP" = "niri" ]; then ' +
+                           '  dms keybinds reset niri "Mod+P" 2>/dev/null; ' +
+                           'elif [ "$DESKTOP" = "sway" ]; then ' +
+                           '  dms keybinds reset sway "Mod4+p" 2>/dev/null; ' +
+                           'else ' +
+                           '  dms keybinds reset hyprland "SUPER + P" 2>/dev/null; ' +
+                           'fi';
+
+        keybindSetupProcess.exec(["bash", "-c", removeScript]);
+        if (pluginService)
+            pluginService.savePluginData(root.pluginId, "autoKeybindConfigured", false);
+    }
+
     // --- Initialization & Settings Sync ---
     Component.onCompleted: {
         loadSettings();
         refreshOutputs();
         monitorPollTimer.start();
+        Qt.callLater(autoRegisterKeybind);
     }
 
     onPluginServiceChanged: {
@@ -90,6 +133,14 @@ PluginComponent {
         hideWhenNoExternal = pluginService.loadPluginData(root.pluginId, "hideWhenNoExternal", false);
         customInternal = pluginService.loadPluginData(root.pluginId, "customInternal", "");
         customExternal = pluginService.loadPluginData(root.pluginId, "customExternal", "");
+
+        var prevAutoKeybind = autoKeybind;
+        autoKeybind = pluginService.loadPluginData(root.pluginId, "autoKeybind", true);
+        if (prevAutoKeybind && !autoKeybind) {
+            removeKeybind();
+        } else if (!prevAutoKeybind && autoKeybind) {
+            autoRegisterKeybind();
+        }
     }
 
     // --- Monitor Detection Logic ---
@@ -143,12 +194,12 @@ PluginComponent {
                         var mon = monitors[i];
                         var name = mon.name || "";
 
-                        // Check if internal (eDP, LVDS, DSI)
+                        // Check if internal laptop display (eDP, LVDS, DSI)
                         if (name.indexOf("eDP") !== -1 || name.indexOf("LVDS") !== -1 || name.indexOf("DSI") !== -1) {
                             foundInternal = name;
                             if (mon.disabled) internalDisabled = true;
                         } else {
-                            // External candidate (HDMI, DP, VGA, Type-C)
+                            // External candidate (HDMI, DP, VGA, Type-C, Virtual)
                             foundExternal = name;
                             if (mon.disabled) {
                                 externalDisabled = true;
@@ -160,13 +211,29 @@ PluginComponent {
                         }
                     }
 
-                    // Apply manual overrides if configured
+                    // Fallback for Desktop PCs without eDP/LVDS laptop screens (e.g. DP-1 + HDMI-A-1)
+                    if (foundInternal === "" && monitors.length > 0) {
+                        foundInternal = monitors[0].name;
+                        internalDisabled = monitors[0].disabled;
+                        if (monitors.length > 1) {
+                            foundExternal = monitors[1].name;
+                            externalDisabled = monitors[1].disabled;
+                            if (monitors[1].mirrorOf && monitors[1].mirrorOf !== "none" && monitors[1].mirrorOf !== "") {
+                                mirrorTarget = monitors[1].mirrorOf;
+                            }
+                        } else {
+                            foundExternal = "";
+                            externalDisabled = true;
+                        }
+                    }
+
+                    // Apply manual overrides if configured by user
                     if (root.customInternal !== "") foundInternal = root.customInternal;
                     if (root.customExternal !== "") foundExternal = root.customExternal;
 
                     if (foundInternal !== "") root.internalMonitor = foundInternal;
                     root.externalMonitor = foundExternal;
-                    root.hasExternalMonitor = (foundExternal !== "");
+                    root.hasExternalMonitor = (foundExternal !== "" && foundExternal !== foundInternal);
 
                     // Determine active projection mode
                     if (!root.hasExternalMonitor || externalDisabled) {
@@ -198,47 +265,63 @@ PluginComponent {
         var intMon = root.internalMonitor || "eDP-1";
         var extMon = root.externalMonitor || "HDMI-A-1";
 
-        var cmd1 = "";
-        var cmd2 = "";
-
         var title = (root.language === "en") ? "Display Projector" : "Proyección de Pantalla";
         var msg = "";
 
+        var luaFile1 = "";
+        var luaFile2 = "";
+        var legacyFile1 = "";
+        var legacyFile2 = "";
+
         if (mode === "internal") {
             // PC screen only: internal on, external disabled
-            cmd1 = "hyprctl keyword monitor " + intMon + ",preferred,auto,1";
-            if (extMon) {
-                cmd2 = "hyprctl keyword monitor " + extMon + ",disable";
-            }
+            luaFile1 = 'hl.monitor({ output = "' + intMon + '", mode = "preferred", position = "0x0", scale = 1, disabled = false })';
+            luaFile2 = 'hl.monitor({ output = "' + extMon + '", disabled = true })';
+            legacyFile1 = "monitor = " + intMon + ",preferred,0x0,1";
+            legacyFile2 = "monitor = " + extMon + ",disable";
             msg = (root.language === "en") ? "Switched to PC screen only" : "Modo activado: Solo pantalla de PC";
             root.activeMode = "internal";
         } else if (mode === "mirror") {
             // Mirror: external mirrors internal
-            cmd1 = "hyprctl keyword monitor " + intMon + ",preferred,auto,1";
-            cmd2 = "hyprctl keyword monitor " + extMon + ",preferred,auto,1,mirror," + intMon;
+            luaFile1 = 'hl.monitor({ output = "' + intMon + '", mode = "preferred", position = "0x0", scale = 1, disabled = false })';
+            luaFile2 = 'hl.monitor({ output = "' + extMon + '", mode = "preferred", position = "auto", scale = 1, disabled = false, mirror = "' + intMon + '" })';
+            legacyFile1 = "monitor = " + intMon + ",preferred,0x0,1";
+            legacyFile2 = "monitor = " + extMon + ",preferred,auto,1,mirror," + intMon;
             msg = (root.language === "en") ? "Switched to Duplicate (Mirror)" : "Modo activado: Duplicar pantalla";
             root.activeMode = "mirror";
         } else if (mode === "extend") {
             // Extend: position according to extendDirection
-            var pos = "auto-right";
-            if (root.extendDirection === "left") pos = "auto-left";
-            else if (root.extendDirection === "above") pos = "auto-up";
-            else if (root.extendDirection === "below") pos = "auto-down";
+            var pos = "1920x0";
+            if (root.extendDirection === "left") pos = "-1920x0";
+            else if (root.extendDirection === "above") pos = "0x-1080";
+            else if (root.extendDirection === "below") pos = "0x1080";
 
-            cmd1 = "hyprctl keyword monitor " + intMon + ",preferred,0x0,1";
-            cmd2 = "hyprctl keyword monitor " + extMon + ",preferred," + pos + ",1";
+            luaFile1 = 'hl.monitor({ output = "' + intMon + '", mode = "preferred", position = "0x0", scale = 1, disabled = false })';
+            luaFile2 = 'hl.monitor({ output = "' + extMon + '", mode = "preferred", position = "' + pos + '", scale = 1, disabled = false })';
+            legacyFile1 = "monitor = " + intMon + ",preferred,0x0,1";
+            legacyFile2 = "monitor = " + extMon + ",preferred," + pos + ",1";
             msg = (root.language === "en") ? "Switched to Extended desktop" : "Modo activado: Escritorio extendido";
             root.activeMode = "extend";
         } else if (mode === "external") {
             // Second screen only: internal disabled, external on
-            cmd1 = "hyprctl keyword monitor " + intMon + ",disable";
-            cmd2 = "hyprctl keyword monitor " + extMon + ",preferred,auto,1";
+            luaFile1 = 'hl.monitor({ output = "' + intMon + '", disabled = true })';
+            luaFile2 = 'hl.monitor({ output = "' + extMon + '", mode = "preferred", position = "0x0", scale = 1, disabled = false })';
+            legacyFile1 = "monitor = " + intMon + ",disable";
+            legacyFile2 = "monitor = " + extMon + ",preferred,0x0,1";
             msg = (root.language === "en") ? "Switched to Second screen only" : "Modo activado: Solo segunda pantalla";
             root.activeMode = "external";
         }
 
-        var fullCmd = cmd1 + (cmd2 ? (" && " + cmd2) : "");
-        executorProcess.exec(["bash", "-c", fullCmd]);
+        var applyScript = 'OUT_LUA="$HOME/.config/hypr/dms/outputs.lua"; ' +
+                          'OUT_CONF="$HOME/.config/hypr/dms/outputs.conf"; ' +
+                          'mkdir -p "$HOME/.config/hypr/dms"; ' +
+                          'printf "%s\\n%s\\n%s\\n" "-- Auto-generated by DMS Projector" "' + luaFile1.replace(/"/g, '\\"') + '" "' + luaFile2.replace(/"/g, '\\"') + '" > "$OUT_LUA"; ' +
+                          'printf "%s\\n%s\\n%s\\n" "# Auto-generated by DMS Projector" "' + legacyFile1.replace(/"/g, '\\"') + '" "' + legacyFile2.replace(/"/g, '\\"') + '" > "$OUT_CONF"; ' +
+                          'hyprctl reload 2>/dev/null; ' +
+                          'WP=$(dms ipc call wallpaper get 2>/dev/null); ' +
+                          'if [ -n "$WP" ]; then dms ipc call wallpaper set "$WP" 2>/dev/null; fi';
+
+        executorProcess.exec(["bash", "-c", applyScript]);
 
         if (root.showNotifications) {
             Quickshell.execDetached(["notify-send", "-a", "DMS Projector", "-i", "video-display", title, msg]);
