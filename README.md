@@ -1,70 +1,62 @@
 # DMS Projector
 
-> **Quick display projection and screen mirroring flyout for [DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell), inspired by Windows `Win + P`.**
+Quick display projection and screen mirroring flyout for DankMaterialShell, inspired by Windows Win + P.
+| Español | English |
+| :---: | :---: |
+| ![Spanish Menu](previews/spanish-menu.png) | ![English Menu](previews/english-menu.png) |
 
-[![DMS Plugin](https://img.shields.io/badge/DMS-Plugin-blue?style=flat-square)](https://danklinux.com/plugins)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
-[![Compositor: Hyprland / Wayland](https://img.shields.io/badge/Compositor-Hyprland%20%2F%20Wayland-informational?style=flat-square)](#)
-
----
 
 ## Features
 
-- **PC Screen Only**: Turn off external HDMI/DisplayPort monitors and use only your laptop/primary display.
-- **Duplicate (Mirror)**: Clone your desktop across both screens instantly with auto-matching resolutions.
-- **Extend**: Spread your workspaces across multiple monitors (supports Right, Left, Above, or Below placement).
-- **Second Screen Only**: Turn off your laptop screen and output solely to your TV or projector.
-- **Material 3 Flyout UI**: Styled to match DankMaterialShell with active mode badges, smooth hover effects, and crisp Material Symbols.
-- **Zero Lag Execution**: Fast, non-blocking asynchronous commands.
-- **OSD Notifications**: Optional feedback on display mode switches.
-- **Bilingual**: Full support for English and Spanish.
-
----
+- PC Screen Only: Turn off external monitors and use only primary screen.
+- Duplicate (Mirror): Clone desktop across both displays.
+- Extend: Expand workspaces across screens (right, left, above, below).
+- Second Screen Only: Turn off primary screen and output only to external display.
+- Auto Shortcut: Automatically registers Super + P keybind on install.
+- Bilingual: Full support for English and Spanish.
 
 ## Installation
 
-### Option 1: Via DMS CLI (when published)
+### Via DMS CLI
 ```bash
-dms plugins install dms-projector
+dms plugins install dmsProjector
 ```
 
-### Option 2: Manual Installation
-Clone or symlink this repository directly into your DMS plugins directory:
+### Manual Installation
+Clone this repository into your DMS plugins directory:
+
 ```bash
-ln -s /home/osvaldx/Desktop/dev/dms-projector ~/.config/DankMaterialShell/plugins/dmsProjector
-```
-Then restart or reload DankMaterialShell (`Super + Shift + R` or `killall quickshell && quickshell`).
-
----
-
-## Global Shortcut Setup (`Super + P`)
-
-To open the projector menu quickly from your keyboard just like in Windows:
-
-### Hyprland (`hyprland.conf`)
-Add this keybind to your Hyprland configuration:
-```ini
-# Open DMS Projector Flyout
-bind = $mainMod, P, exec, dms ipc call widget toggle dmsProjector
+git clone https://github.com/osvaldx/dms-projector.git ~/.config/DankMaterialShell/plugins/dmsProjector
 ```
 
----
+Then restart DMS:
+```bash
+dms restart
+```
+
+## Shortcut (Win + P)
+
+The plugin automatically configures the Super + P shortcut upon installation.
+
+If you prefer to configure it manually:
+- Hyprland: `dms keybinds set hyprland "SUPER + P" "exec dms ipc call widget toggle dmsProjector"`
+- Niri: `dms keybinds set niri "Mod+P" "exec dms ipc call widget toggle dmsProjector"`
+- Sway: `dms keybinds set sway "Mod4+p" "exec dms ipc call widget toggle dmsProjector"`
 
 ## Configuration
 
-Open **DankMaterialShell Settings -> Plugins -> DMS Projector** to configure:
+Available in DankMaterialShell Settings > Plugins > DMS Projector:
 
 | Setting | Options | Default | Description |
 |---|---|---|---|
-| **Language** | `Español`, `English` | `Español` | Interface and notification language |
-| **Extended Direction** | `Right`, `Left`, `Above`, `Below` | `Right` | Where to place the external screen when extending |
-| **Show Notifications** | `true` / `false` | `true` | System OSD toast on projection change |
-| **Hide when no external** | `true` / `false` | `false` | Hide bar widget when no HDMI/DP monitor is plugged |
-| **Primary Output Override** | Text (e.g. `eDP-1`) | Auto-detect | Manually specify primary screen name |
-| **Secondary Output Override** | Text (e.g. `HDMI-A-1`) | Auto-detect | Manually specify external screen name |
-
----
+| Language | Español, English | Español | Interface and notification language |
+| Extended Direction | Right, Left, Above, Below | Right | Placement of external screen |
+| Automatic Shortcut | true / false | true | Auto-register Win + P |
+| Show Notifications | true / false | true | Desktop notification on mode switch |
+| Hide when no external | true / false | false | Hide bar icon when no external display is connected |
+| Primary Output Override | Text (e.g. eDP-1) | Auto-detect | Manually set primary screen name |
+| Secondary Output Override | Text (e.g. HDMI-A-1) | Auto-detect | Manually set external screen name |
 
 ## License
 
-MIT License (c) 2026 [osvaldx](https://github.com/osvaldx)
+MIT License (c) 2026 osvaldx
