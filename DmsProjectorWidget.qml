@@ -62,25 +62,26 @@ PluginComponent {
         id: keybindSetupProcess
     }
 
-    function autoRegisterKeybind() {
+    function autoRegisterKeybind(force) {
         if (!pluginService || !autoKeybind)
             return;
-        var alreadyDone = pluginService.loadPluginData(root.pluginId, "autoKeybindConfigured", false);
-        if (alreadyDone)
+        var status = pluginService.loadPluginData(root.pluginId, "autoKeybindConfigured", "");
+        if (!force && status === "v2")
             return;
 
         // Auto configure Win+P for any user installing the plugin across supported compositors
         var setupScript = 'DESKTOP="$(echo $XDG_CURRENT_DESKTOP | tr "[:upper:]" "[:lower:]")"; ' +
                           'if [ "$DESKTOP" = "niri" ]; then ' +
-                          '  dms keybinds set niri "Mod+P" "dms ipc call widget toggle dmsProjector" --desc "Project Display (Win+P)" 2>/dev/null; ' +
+                          '  dms keybinds set niri "Mod+P" "exec dms ipc call widget toggle dmsProjector" --desc "Project Display (Win+P)" 2>/dev/null; ' +
                           'elif [ "$DESKTOP" = "sway" ]; then ' +
-                          '  dms keybinds set sway "Mod4+p" "dms ipc call widget toggle dmsProjector" --desc "Project Display (Win+P)" 2>/dev/null; ' +
+                          '  dms keybinds set sway "Mod4+p" "exec dms ipc call widget toggle dmsProjector" --desc "Project Display (Win+P)" 2>/dev/null; ' +
                           'else ' +
-                          '  dms keybinds set hyprland "SUPER + P" "dms ipc call widget toggle dmsProjector" --desc "Project Display (Win+P)" 2>/dev/null; ' +
+                          '  dms keybinds set hyprland "SUPER + P" "exec dms ipc call widget toggle dmsProjector" --desc "Project Display (Win+P)" 2>/dev/null; ' +
+                          '  hyprctl reload 2>/dev/null; ' +
                           'fi';
 
         keybindSetupProcess.exec(["bash", "-c", setupScript]);
-        pluginService.savePluginData(root.pluginId, "autoKeybindConfigured", true);
+        pluginService.savePluginData(root.pluginId, "autoKeybindConfigured", "v2");
     }
 
     function removeKeybind() {
@@ -91,11 +92,12 @@ PluginComponent {
                            '  dms keybinds reset sway "Mod4+p" 2>/dev/null; ' +
                            'else ' +
                            '  dms keybinds reset hyprland "SUPER + P" 2>/dev/null; ' +
+                           '  hyprctl reload 2>/dev/null; ' +
                            'fi';
 
         keybindSetupProcess.exec(["bash", "-c", removeScript]);
         if (pluginService)
-            pluginService.savePluginData(root.pluginId, "autoKeybindConfigured", false);
+            pluginService.savePluginData(root.pluginId, "autoKeybindConfigured", "removed");
     }
 
     // --- Initialization & Settings Sync ---
@@ -103,7 +105,7 @@ PluginComponent {
         loadSettings();
         refreshOutputs();
         monitorPollTimer.start();
-        Qt.callLater(autoRegisterKeybind);
+        Qt.callLater(function() { autoRegisterKeybind(false); });
     }
 
     onPluginServiceChanged: {
@@ -139,7 +141,7 @@ PluginComponent {
         if (prevAutoKeybind && !autoKeybind) {
             removeKeybind();
         } else if (!prevAutoKeybind && autoKeybind) {
-            autoRegisterKeybind();
+            autoRegisterKeybind(true);
         }
     }
 

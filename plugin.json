@@ -9,6 +9,7 @@
     "dependencies": [],
     "compositors": ["any"],
     "distro": ["any"],
+    "screenshot": "https://github.com/osvaldx/dms-projector/blob/main/previews/english-menu.png?raw=true",
     "version": "1.0.0",
     "type": "widget",
     "icon": "screen_share",
@@ -16,6 +17,7 @@
     "settings": "./DmsProjectorSettings.qml",
     "permissions": [
         "settings_read",
-        "settings_write"
+        "settings_write",
+        "process"
     ]
 }
