@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 import qs.Common
 import qs.Services
 import qs.Widgets
@@ -19,13 +20,13 @@ PluginComponent {
     property bool isInitialized: false
 
     // --- Configurable Settings ---
-    property string language: "es"
+    property string language: "en"
     property string extendDirection: "right"
     property bool showNotifications: true
     property bool hideWhenNoExternal: false
     property string customInternal: ""
     property string customExternal: ""
-    property bool autoKeybind: true
+    property bool autoKeybind: false
 
     // --- IPC Handler for CLI and Keyboard Shortcuts (Win + P) ---
     IpcHandler {
@@ -57,9 +58,76 @@ PluginComponent {
     // Visibility in DankBar
     visible: !(hideWhenNoExternal && !hasExternalMonitor)
 
-    // --- Process for Auto-Configuring Keybind ---
-    Process {
-        id: keybindSetupProcess
+    // --- React to Screen Connection Changes (Wayland wl_output & Hyprland IPC Events) ---
+    Timer {
+        id: hotplugRetryTimer1
+        interval: 200
+        repeat: false
+        onTriggered: root.refreshOutputs()
+    }
+
+    Timer {
+        id: hotplugRetryTimer2
+        interval: 600
+        repeat: false
+        onTriggered: root.refreshOutputs()
+    }
+
+    Timer {
+        id: hotplugRetryTimer3
+        interval: 1200
+        repeat: false
+        onTriggered: root.refreshOutputs()
+    }
+
+    function triggerHotplugScan() {
+        root.refreshOutputs();
+        hotplugRetryTimer1.restart();
+        hotplugRetryTimer2.restart();
+        hotplugRetryTimer3.restart();
+    }
+
+    Connections {
+        target: (typeof WlrOutputService !== "undefined") ? WlrOutputService : null
+        ignoreUnknownSignals: true
+        function onStateChanged() {
+            root.triggerHotplugScan();
+        }
+    }
+
+    Connections {
+        target: Quickshell
+        ignoreUnknownSignals: true
+        function onScreensChanged() {
+            root.triggerHotplugScan();
+        }
+    }
+
+    Connections {
+        target: Hyprland
+        ignoreUnknownSignals: true
+        function onRawEvent(event) {
+            root.triggerHotplugScan();
+        }
+    }
+
+    Connections {
+        target: (typeof HyprlandService !== "undefined") ? HyprlandService : null
+        ignoreUnknownSignals: true
+        function onMonitorLayoutChanged() {
+            root.triggerHotplugScan();
+        }
+    }
+
+    // Fast polling only while the popout menu is visible
+    Timer {
+        id: activeOpenPollTimer
+        interval: 2000
+        repeat: true
+        running: pluginPopout ? pluginPopout.visible : false
+        onTriggered: {
+            root.refreshOutputs();
+        }
     }
 
     function autoRegisterKeybind(force) {
@@ -69,7 +137,7 @@ PluginComponent {
         if (!force && status === "v2")
             return;
 
-        // Auto configure Win+P for any user installing the plugin across supported compositors
+        // Auto configure Win+P for user opting into the shortcut
         var setupScript = 'DESKTOP="$(echo $XDG_CURRENT_DESKTOP | tr "[:upper:]" "[:lower:]")"; ' +
                           'if [ "$DESKTOP" = "niri" ]; then ' +
                           '  dms keybinds set niri "Mod+P" "exec dms ipc call widget toggle dmsProjector" --desc "Project Display (Win+P)" 2>/dev/null; ' +
@@ -80,7 +148,7 @@ PluginComponent {
                           '  hyprctl reload 2>/dev/null; ' +
                           'fi';
 
-        keybindSetupProcess.exec(["bash", "-c", setupScript]);
+        Quickshell.execDetached(["bash", "-c", setupScript]);
         pluginService.savePluginData(root.pluginId, "autoKeybindConfigured", "v2");
     }
 
@@ -95,7 +163,7 @@ PluginComponent {
                            '  hyprctl reload 2>/dev/null; ' +
                            'fi';
 
-        keybindSetupProcess.exec(["bash", "-c", removeScript]);
+        Quickshell.execDetached(["bash", "-c", removeScript]);
         if (pluginService)
             pluginService.savePluginData(root.pluginId, "autoKeybindConfigured", "removed");
     }
@@ -104,7 +172,6 @@ PluginComponent {
     Component.onCompleted: {
         loadSettings();
         refreshOutputs();
-        monitorPollTimer.start();
         Qt.callLater(function() { autoRegisterKeybind(false); });
     }
 
@@ -129,7 +196,7 @@ PluginComponent {
     function loadSettings() {
         if (!pluginService)
             return;
-        language = pluginService.loadPluginData(root.pluginId, "language", "es");
+        language = pluginService.loadPluginData(root.pluginId, "language", "en");
         extendDirection = pluginService.loadPluginData(root.pluginId, "extendDirection", "right");
         showNotifications = pluginService.loadPluginData(root.pluginId, "showNotifications", true);
         hideWhenNoExternal = pluginService.loadPluginData(root.pluginId, "hideWhenNoExternal", false);
@@ -137,7 +204,7 @@ PluginComponent {
         customExternal = pluginService.loadPluginData(root.pluginId, "customExternal", "");
 
         var prevAutoKeybind = autoKeybind;
-        autoKeybind = pluginService.loadPluginData(root.pluginId, "autoKeybind", true);
+        autoKeybind = pluginService.loadPluginData(root.pluginId, "autoKeybind", false);
         if (prevAutoKeybind && !autoKeybind) {
             removeKeybind();
         } else if (!prevAutoKeybind && autoKeybind) {
@@ -145,21 +212,125 @@ PluginComponent {
         }
     }
 
+    // Map to preserve detected monitor attributes (scales, modes, other monitors)
+    property var monitorsMap: ({})
+    property var otherMonitorsList: []
+
     // --- Monitor Detection Logic ---
-    function refreshOutputs() {
-        if (!monitorDetectionProcess.running) {
-            monitorDetectionProcess.exec(["hyprctl", "monitors", "all", "-j"]);
+    Process {
+        id: monitorDetectionProcess
+        command: ["hyprctl", "monitors", "all", "-j"]
+        running: false
+        stdout: StdioCollector {
+            id: monitorCollector
+        }
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0) return;
+            var raw = monitorCollector.text ? monitorCollector.text.trim() : "";
+            if (!raw) return;
+
+            var jsonStart = raw.indexOf('[');
+            if (jsonStart !== -1) {
+                raw = raw.substring(jsonStart);
+            }
+
+            try {
+                var monitors = JSON.parse(raw);
+                var foundInternal = "";
+                var foundExternal = "";
+                var externalDisabled = false;
+                var internalDisabled = false;
+                var mirrorTarget = "none";
+                var newMonMap = {};
+                var others = [];
+
+                for (var i = 0; i < monitors.length; i++) {
+                    var mon = monitors[i];
+                    var name = mon.name || "";
+                    if (!name) continue;
+
+                    newMonMap[name] = {
+                        scale: (mon.scale !== undefined && mon.scale > 0) ? mon.scale : 1,
+                        width: mon.width || 0,
+                        height: mon.height || 0,
+                        refreshRate: mon.refreshRate || 60,
+                        disabled: !!mon.disabled,
+                        mirrorOf: mon.mirrorOf || "none"
+                    };
+
+                    // Check if internal laptop display (eDP, LVDS, DSI)
+                    if (name.indexOf("eDP") !== -1 || name.indexOf("LVDS") !== -1 || name.indexOf("DSI") !== -1) {
+                        foundInternal = name;
+                        if (mon.disabled) internalDisabled = true;
+                    } else if (foundExternal === "") {
+                        // External candidate (HDMI, DP, VGA, Type-C, Virtual)
+                        foundExternal = name;
+                        if (mon.disabled) {
+                            externalDisabled = true;
+                        } else {
+                            if (mon.mirrorOf && mon.mirrorOf !== "none" && mon.mirrorOf !== "") {
+                                mirrorTarget = mon.mirrorOf;
+                            }
+                        }
+                    } else {
+                        others.push(mon);
+                    }
+                }
+
+                // Fallback for Desktop PCs without eDP/LVDS laptop screens (e.g. DP-1 + HDMI-A-1)
+                if (foundInternal === "" && monitors.length > 0) {
+                    foundInternal = monitors[0].name;
+                    internalDisabled = monitors[0].disabled;
+                    if (monitors.length > 1) {
+                        foundExternal = monitors[1].name;
+                        externalDisabled = monitors[1].disabled;
+                        if (monitors[1].mirrorOf && monitors[1].mirrorOf !== "none" && monitors[1].mirrorOf !== "") {
+                            mirrorTarget = monitors[1].mirrorOf;
+                        }
+                    } else {
+                        foundExternal = "";
+                        externalDisabled = true;
+                    }
+                }
+
+                root.monitorsMap = newMonMap;
+                root.otherMonitorsList = others;
+
+                // Apply manual overrides if configured by user
+                if (root.customInternal !== "") foundInternal = root.customInternal;
+                if (root.customExternal !== "") foundExternal = root.customExternal;
+
+                if (foundInternal !== "") root.internalMonitor = foundInternal;
+                root.externalMonitor = foundExternal;
+                root.hasExternalMonitor = (foundExternal !== "" && foundExternal !== foundInternal);
+
+                // Determine active projection mode
+                if (!root.hasExternalMonitor || externalDisabled) {
+                    root.activeMode = "internal";
+                } else if (internalDisabled && !externalDisabled) {
+                    root.activeMode = "external";
+                } else if (mirrorTarget !== "none") {
+                    root.activeMode = "mirror";
+                } else {
+                    root.activeMode = "extend";
+                }
+
+                if (!root.isInitialized) {
+                    root.isInitialized = true;
+                }
+            } catch (e) {
+                console.error("DMS Projector: Failed to parse monitors JSON", e);
+            }
         }
     }
 
-    Timer {
-        id: monitorPollTimer
-        interval: 4000
-        repeat: true
-        running: true
-        onTriggered: {
-            root.refreshOutputs();
+    function refreshOutputs() {
+        if (monitorDetectionProcess.running) {
+            monitorDetectionProcess.running = false;
         }
+        Qt.callLater(function() {
+            monitorDetectionProcess.running = true;
+        });
     }
 
     Timer {
@@ -171,124 +342,40 @@ PluginComponent {
         }
     }
 
-    Process {
-        id: monitorDetectionProcess
-        command: ["hyprctl", "monitors", "all", "-j"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var raw = text.trim();
-                if (!raw) return;
-
-                var jsonStart = raw.indexOf('[');
-                if (jsonStart !== -1) {
-                    raw = raw.substring(jsonStart);
-                }
-
-                try {
-                    var monitors = JSON.parse(raw);
-                    var foundInternal = "";
-                    var foundExternal = "";
-                    var externalDisabled = false;
-                    var internalDisabled = false;
-                    var mirrorTarget = "none";
-
-                    for (var i = 0; i < monitors.length; i++) {
-                        var mon = monitors[i];
-                        var name = mon.name || "";
-
-                        // Check if internal laptop display (eDP, LVDS, DSI)
-                        if (name.indexOf("eDP") !== -1 || name.indexOf("LVDS") !== -1 || name.indexOf("DSI") !== -1) {
-                            foundInternal = name;
-                            if (mon.disabled) internalDisabled = true;
-                        } else {
-                            // External candidate (HDMI, DP, VGA, Type-C, Virtual)
-                            foundExternal = name;
-                            if (mon.disabled) {
-                                externalDisabled = true;
-                            } else {
-                                if (mon.mirrorOf && mon.mirrorOf !== "none" && mon.mirrorOf !== "") {
-                                    mirrorTarget = mon.mirrorOf;
-                                }
-                            }
-                        }
-                    }
-
-                    // Fallback for Desktop PCs without eDP/LVDS laptop screens (e.g. DP-1 + HDMI-A-1)
-                    if (foundInternal === "" && monitors.length > 0) {
-                        foundInternal = monitors[0].name;
-                        internalDisabled = monitors[0].disabled;
-                        if (monitors.length > 1) {
-                            foundExternal = monitors[1].name;
-                            externalDisabled = monitors[1].disabled;
-                            if (monitors[1].mirrorOf && monitors[1].mirrorOf !== "none" && monitors[1].mirrorOf !== "") {
-                                mirrorTarget = monitors[1].mirrorOf;
-                            }
-                        } else {
-                            foundExternal = "";
-                            externalDisabled = true;
-                        }
-                    }
-
-                    // Apply manual overrides if configured by user
-                    if (root.customInternal !== "") foundInternal = root.customInternal;
-                    if (root.customExternal !== "") foundExternal = root.customExternal;
-
-                    if (foundInternal !== "") root.internalMonitor = foundInternal;
-                    root.externalMonitor = foundExternal;
-                    root.hasExternalMonitor = (foundExternal !== "" && foundExternal !== foundInternal);
-
-                    // Determine active projection mode
-                    if (!root.hasExternalMonitor || externalDisabled) {
-                        root.activeMode = "internal";
-                    } else if (internalDisabled && !externalDisabled) {
-                        root.activeMode = "external";
-                    } else if (mirrorTarget !== "none") {
-                        root.activeMode = "mirror";
-                    } else {
-                        root.activeMode = "extend";
-                    }
-
-                    if (!root.isInitialized) {
-                        root.isInitialized = true;
-                    }
-                } catch (e) {
-                    console.error("DMS Projector: Failed to parse monitors JSON", e);
-                }
-            }
-        }
-    }
-
-    // --- Mode Execution Logic ---
-    Process {
-        id: executorProcess
-    }
-
     function applyMode(mode) {
         var intMon = root.internalMonitor || "eDP-1";
         var extMon = root.externalMonitor || "HDMI-A-1";
 
+        var intScale = (root.monitorsMap[intMon] && root.monitorsMap[intMon].scale) ? root.monitorsMap[intMon].scale : 1;
+        var extScale = (root.monitorsMap[extMon] && root.monitorsMap[extMon].scale) ? root.monitorsMap[extMon].scale : 1;
+
         var title = (root.language === "en") ? "Display Projector" : "Proyección de Pantalla";
         var msg = "";
-
         var luaFile1 = "";
         var luaFile2 = "";
         var legacyFile1 = "";
         var legacyFile2 = "";
 
+        var needReset = false;
+        var resetLua1 = "";
+        var resetLua2 = "";
+        var resetConf1 = "";
+        var resetConf2 = "";
+
         if (mode === "internal") {
             // PC screen only: internal on, external disabled
-            luaFile1 = 'hl.monitor({ output = "' + intMon + '", mode = "preferred", position = "0x0", scale = 1, disabled = false })';
+            luaFile1 = 'hl.monitor({ output = "' + intMon + '", mode = "preferred", position = "0x0", scale = ' + intScale + ' })';
             luaFile2 = 'hl.monitor({ output = "' + extMon + '", disabled = true })';
-            legacyFile1 = "monitor = " + intMon + ",preferred,0x0,1";
+            legacyFile1 = "monitor = " + intMon + ",preferred,0x0," + intScale;
             legacyFile2 = "monitor = " + extMon + ",disable";
             msg = (root.language === "en") ? "Switched to PC screen only" : "Modo activado: Solo pantalla de PC";
             root.activeMode = "internal";
         } else if (mode === "mirror") {
             // Mirror: external mirrors internal
-            luaFile1 = 'hl.monitor({ output = "' + intMon + '", mode = "preferred", position = "0x0", scale = 1, disabled = false })';
-            luaFile2 = 'hl.monitor({ output = "' + extMon + '", mode = "preferred", position = "auto", scale = 1, disabled = false, mirror = "' + intMon + '" })';
-            legacyFile1 = "monitor = " + intMon + ",preferred,0x0,1";
-            legacyFile2 = "monitor = " + extMon + ",preferred,auto,1,mirror," + intMon;
+            luaFile1 = 'hl.monitor({ output = "' + intMon + '", mode = "preferred", position = "0x0", scale = ' + intScale + ' })';
+            luaFile2 = 'hl.monitor({ output = "' + extMon + '", mode = "preferred", position = "auto", scale = ' + extScale + ', mirror = "' + intMon + '" })';
+            legacyFile1 = "monitor = " + intMon + ",preferred,0x0," + intScale;
+            legacyFile2 = "monitor = " + extMon + ",preferred,auto," + extScale + ",mirror," + intMon;
             msg = (root.language === "en") ? "Switched to Duplicate (Mirror)" : "Modo activado: Duplicar pantalla";
             root.activeMode = "mirror";
         } else if (mode === "extend") {
@@ -298,48 +385,61 @@ PluginComponent {
             else if (root.extendDirection === "above") pos = "auto-up";
             else if (root.extendDirection === "below") pos = "auto-down";
 
-            luaFile1 = 'hl.monitor({ output = "' + intMon + '", mode = "preferred", position = "0x0", scale = 1, disabled = false })';
-            luaFile2 = 'hl.monitor({ output = "' + extMon + '", mode = "preferred", position = "' + pos + '", scale = 1, disabled = false })';
-            legacyFile1 = "monitor = " + intMon + ",preferred,0x0,1";
-            legacyFile2 = "monitor = " + extMon + ",preferred," + pos + ",1";
+            luaFile1 = 'hl.monitor({ output = "' + intMon + '", mode = "preferred", position = "0x0", scale = ' + intScale + ' })';
+            luaFile2 = 'hl.monitor({ output = "' + extMon + '", mode = "preferred", position = "' + pos + '", scale = ' + extScale + ' })';
+            legacyFile1 = "monitor = " + intMon + ",preferred,0x0," + intScale;
+            legacyFile2 = "monitor = " + extMon + ",preferred," + pos + "," + extScale;
             msg = (root.language === "en") ? "Switched to Extended desktop" : "Modo activado: Escritorio extendido";
             root.activeMode = "extend";
+
+            // Detach any previous mirror pipeline by briefly cycling external output while keeping internal alive
+            needReset = true;
+            resetLua1 = 'hl.monitor({ output = "' + intMon + '", mode = "preferred", position = "0x0", scale = ' + intScale + ' })';
+            resetLua2 = 'hl.monitor({ output = "' + extMon + '", disabled = true })';
+            resetConf1 = 'monitor = ' + intMon + ',preferred,0x0,' + intScale;
+            resetConf2 = 'monitor = ' + extMon + ',disable';
         } else if (mode === "external") {
-            // Second screen only: internal disabled, external on
-            luaFile1 = 'hl.monitor({ output = "' + intMon + '", disabled = true })';
-            luaFile2 = 'hl.monitor({ output = "' + extMon + '", mode = "preferred", position = "0x0", scale = 1, disabled = false })';
-            legacyFile1 = "monitor = " + intMon + ",disable";
-            legacyFile2 = "monitor = " + extMon + ",preferred,0x0,1";
+            // Second screen only: external on FIRST, internal disabled
+            luaFile1 = 'hl.monitor({ output = "' + extMon + '", mode = "preferred", position = "0x0", scale = ' + extScale + ' })';
+            luaFile2 = 'hl.monitor({ output = "' + intMon + '", disabled = true })';
+            legacyFile1 = "monitor = " + extMon + ",preferred,0x0," + extScale;
+            legacyFile2 = "monitor = " + intMon + ",disable";
             msg = (root.language === "en") ? "Switched to Second screen only" : "Modo activado: Solo segunda pantalla";
             root.activeMode = "external";
         }
 
-        var applyScript = 'OUT_LUA="$HOME/.config/hypr/dms/outputs.lua"; ' +
-                          'OUT_CONF="$HOME/.config/hypr/dms/outputs.conf"; ' +
-                          'mkdir -p "$HOME/.config/hypr/dms"; ';
-
-        if (mode !== "internal") {
-            // Step 1: Clean intermediate reset to detach CRTC/mirror pipelines and reset coordinate bounds
-            var resetLua1 = 'hl.monitor({ output = "' + intMon + '", mode = "preferred", position = "0x0", scale = 1, disabled = false })';
-            var resetLua2 = 'hl.monitor({ output = "' + extMon + '", disabled = true })';
-            var resetConf1 = 'monitor = ' + intMon + ',preferred,0x0,1';
-            var resetConf2 = 'monitor = ' + extMon + ',disable';
-
-            applyScript += 'printf "%s\\n%s\\n%s\\n" "-- Reset by DMS Projector" "' + resetLua1.replace(/"/g, '\\"') + '" "' + resetLua2.replace(/"/g, '\\"') + '" > "$OUT_LUA"; ' +
-                           'printf "%s\\n%s\\n%s\\n" "# Reset by DMS Projector" "' + resetConf1.replace(/"/g, '\\"') + '" "' + resetConf2.replace(/"/g, '\\"') + '" > "$OUT_CONF"; ' +
-                           'hyprctl reload 2>/dev/null; ' +
-                           'sleep 0.12; ';
+        // Preserve any additional 3rd/4th monitors so their config is never wiped
+        var extraLuaLines = "";
+        var extraConfLines = "";
+        if (root.otherMonitorsList && root.otherMonitorsList.length > 0) {
+            for (var m = 0; m < root.otherMonitorsList.length; m++) {
+                var oMon = root.otherMonitorsList[m];
+                var oScale = (oMon.scale !== undefined && oMon.scale > 0) ? oMon.scale : 1;
+                if (!oMon.disabled) {
+                    extraLuaLines += '\\nhl.monitor({ output = "' + oMon.name + '", mode = "preferred", position = "auto", scale = ' + oScale + ' })';
+                    extraConfLines += '\\nmonitor = ' + oMon.name + ',preferred,auto,' + oScale;
+                }
+            }
         }
 
-        // Step 2: Write final requested target configuration
-        applyScript += 'printf "%s\\n%s\\n%s\\n" "-- Auto-generated by DMS Projector" "' + luaFile1.replace(/"/g, '\\"') + '" "' + luaFile2.replace(/"/g, '\\"') + '" > "$OUT_LUA"; ' +
-                       'printf "%s\\n%s\\n%s\\n" "# Auto-generated by DMS Projector" "' + legacyFile1.replace(/"/g, '\\"') + '" "' + legacyFile2.replace(/"/g, '\\"') + '" > "$OUT_CONF"; ' +
-                       'hyprctl reload 2>/dev/null; ' +
-                       'sleep 0.08; ' +
-                       'WP=$(dms ipc call wallpaper get 2>/dev/null); ' +
-                       'if [ -n "$WP" ]; then dms ipc call wallpaper set "$WP" 2>/dev/null; fi';
+        var applyScript = 'OUT_LUA="$HOME/.config/hypr/dms/outputs.lua"; ' +
+                          'OUT_CONF="$HOME/.config/hypr/dms/outputs.conf"; ' +
+                          'mkdir -p "$HOME/.config/hypr/dms"; ' +
+                          'WP=$(dms ipc call wallpaper get 2>/dev/null); ';
 
-        executorProcess.exec(["bash", "-c", applyScript]);
+        if (needReset) {
+            applyScript += 'printf "%s\\n%s\\n%s\\n" "-- Auto-generated by DMS — do not edit manually" "' + resetLua1.replace(/"/g, '\\"') + '" "' + resetLua2.replace(/"/g, '\\"') + '" > "$OUT_LUA"; ' +
+                           'printf "%s\\n%s\\n%s\\n" "# Auto-generated by DMS — do not edit manually" "' + resetConf1.replace(/"/g, '\\"') + '" "' + resetConf2.replace(/"/g, '\\"') + '" > "$OUT_CONF"; ' +
+                           'hyprctl reload 2>/dev/null; ' +
+                           'sleep 0.15; ';
+        }
+
+        applyScript += 'printf "%s\\n%s\\n%s' + extraLuaLines + '\\n" "-- Auto-generated by DMS — do not edit manually" "' + luaFile1.replace(/"/g, '\\"') + '" "' + luaFile2.replace(/"/g, '\\"') + '" > "$OUT_LUA"; ' +
+                       'printf "%s\\n%s\\n%s' + extraConfLines + '\\n" "# Auto-generated by DMS — do not edit manually" "' + legacyFile1.replace(/"/g, '\\"') + '" "' + legacyFile2.replace(/"/g, '\\"') + '" > "$OUT_CONF"; ' +
+                       'hyprctl reload 2>/dev/null; ' +
+                       '(sleep 0.35; if [ -n "$WP" ]; then dms ipc call wallpaper set "$WP" 2>/dev/null; fi; sleep 0.45; if [ -n "$WP" ]; then dms ipc call wallpaper set "$WP" 2>/dev/null; fi) &';
+
+        Quickshell.execDetached(["bash", "-c", applyScript]);
 
         if (root.showNotifications) {
             Quickshell.execDetached(["notify-send", "-a", "DMS Projector", "-i", "video-display", title, msg]);

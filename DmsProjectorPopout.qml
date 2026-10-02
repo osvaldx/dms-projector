@@ -82,7 +82,7 @@ PopoutComponent {
 
                 DankIcon {
                     name: "info"
-                    size: 18
+                    size: Theme.iconSize ? Theme.iconSize : 18
                     color: Theme.primary
                 }
 
@@ -122,15 +122,15 @@ PopoutComponent {
                     spacing: Theme.spacingM
 
                     Rectangle {
-                        width: 36
-                        height: 36
+                        width: (Theme.iconSize ? Theme.iconSize : 20) + 16
+                        height: (Theme.iconSize ? Theme.iconSize : 20) + 16
                         radius: Theme.cornerRadius
                         color: (root.widget && root.widget.activeMode === "internal") ? Theme.primary : Theme.surfaceContainerHigh
 
                         DankIcon {
                             anchors.centerIn: parent
                             name: "computer"
-                            size: 20
+                            size: Theme.iconSize ? Theme.iconSize : 20
                             color: (root.widget && root.widget.activeMode === "internal") ? Theme.onPrimary : Theme.primary
                         }
                     }
@@ -157,7 +157,7 @@ PopoutComponent {
 
                     Rectangle {
                         visible: root.widget && root.widget.activeMode === "internal"
-                        radius: 4
+                        radius: Theme.cornerRadiusSmall ? Theme.cornerRadiusSmall : 4
                         color: Theme.primary
                         implicitWidth: badgeText1.implicitWidth + 10
                         implicitHeight: 20
@@ -166,7 +166,7 @@ PopoutComponent {
                             id: badgeText1
                             anchors.centerIn: parent
                             text: root.t("activeBadge")
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontSizeExtraSmall ? Theme.fontSizeExtraSmall : (Theme.fontSizeSmall ? Theme.fontSizeSmall * 0.85 : 10)
                             font.weight: Font.Bold
                             color: Theme.onPrimary
                         }
@@ -207,15 +207,15 @@ PopoutComponent {
                     spacing: Theme.spacingM
 
                     Rectangle {
-                        width: 36
-                        height: 36
+                        width: (Theme.iconSize ? Theme.iconSize : 20) + 16
+                        height: (Theme.iconSize ? Theme.iconSize : 20) + 16
                         radius: Theme.cornerRadius
                         color: (root.widget && root.widget.activeMode === "mirror") ? Theme.primary : Theme.surfaceContainerHigh
 
                         DankIcon {
                             anchors.centerIn: parent
                             name: "content_copy"
-                            size: 20
+                            size: Theme.iconSize ? Theme.iconSize : 20
                             color: (root.widget && root.widget.activeMode === "mirror") ? Theme.onPrimary : Theme.primary
                         }
                     }
@@ -242,7 +242,7 @@ PopoutComponent {
 
                     Rectangle {
                         visible: root.widget && root.widget.activeMode === "mirror"
-                        radius: 4
+                        radius: Theme.cornerRadiusSmall ? Theme.cornerRadiusSmall : 4
                         color: Theme.primary
                         implicitWidth: badgeText2.implicitWidth + 10
                         implicitHeight: 20
@@ -251,7 +251,7 @@ PopoutComponent {
                             id: badgeText2
                             anchors.centerIn: parent
                             text: root.t("activeBadge")
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontSizeExtraSmall ? Theme.fontSizeExtraSmall : (Theme.fontSizeSmall ? Theme.fontSizeSmall * 0.85 : 10)
                             font.weight: Font.Bold
                             color: Theme.onPrimary
                         }
@@ -292,15 +292,15 @@ PopoutComponent {
                     spacing: Theme.spacingM
 
                     Rectangle {
-                        width: 36
-                        height: 36
+                        width: (Theme.iconSize ? Theme.iconSize : 20) + 16
+                        height: (Theme.iconSize ? Theme.iconSize : 20) + 16
                         radius: Theme.cornerRadius
                         color: (root.widget && root.widget.activeMode === "extend") ? Theme.primary : Theme.surfaceContainerHigh
 
                         DankIcon {
                             anchors.centerIn: parent
                             name: "splitscreen"
-                            size: 20
+                            size: Theme.iconSize ? Theme.iconSize : 20
                             color: (root.widget && root.widget.activeMode === "extend") ? Theme.onPrimary : Theme.primary
                         }
                     }
@@ -327,7 +327,7 @@ PopoutComponent {
 
                     Rectangle {
                         visible: root.widget && root.widget.activeMode === "extend"
-                        radius: 4
+                        radius: Theme.cornerRadiusSmall ? Theme.cornerRadiusSmall : 4
                         color: Theme.primary
                         implicitWidth: badgeText3.implicitWidth + 10
                         implicitHeight: 20
@@ -336,7 +336,7 @@ PopoutComponent {
                             id: badgeText3
                             anchors.centerIn: parent
                             text: root.t("activeBadge")
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontSizeExtraSmall ? Theme.fontSizeExtraSmall : (Theme.fontSizeSmall ? Theme.fontSizeSmall * 0.85 : 10)
                             font.weight: Font.Bold
                             color: Theme.onPrimary
                         }
@@ -377,15 +377,15 @@ PopoutComponent {
                     spacing: Theme.spacingM
 
                     Rectangle {
-                        width: 36
-                        height: 36
+                        width: (Theme.iconSize ? Theme.iconSize : 20) + 16
+                        height: (Theme.iconSize ? Theme.iconSize : 20) + 16
                         radius: Theme.cornerRadius
                         color: (root.widget && root.widget.activeMode === "external") ? Theme.primary : Theme.surfaceContainerHigh
 
                         DankIcon {
                             anchors.centerIn: parent
                             name: "tv"
-                            size: 20
+                            size: Theme.iconSize ? Theme.iconSize : 20
                             color: (root.widget && root.widget.activeMode === "external") ? Theme.onPrimary : Theme.primary
                         }
                     }
@@ -412,7 +412,7 @@ PopoutComponent {
 
                     Rectangle {
                         visible: root.widget && root.widget.activeMode === "external"
-                        radius: 4
+                        radius: Theme.cornerRadiusSmall ? Theme.cornerRadiusSmall : 4
                         color: Theme.primary
                         implicitWidth: badgeText4.implicitWidth + 10
                         implicitHeight: 20
@@ -421,7 +421,7 @@ PopoutComponent {
                             id: badgeText4
                             anchors.centerIn: parent
                             text: root.t("activeBadge")
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontSizeExtraSmall ? Theme.fontSizeExtraSmall : (Theme.fontSizeSmall ? Theme.fontSizeSmall * 0.85 : 10)
                             font.weight: Font.Bold
                             color: Theme.onPrimary
                         }
@@ -457,7 +457,7 @@ PopoutComponent {
 
                 DankIcon {
                     name: "display_settings"
-                    size: 16
+                    size: (Theme.iconSize ? Theme.iconSize : 20) * 0.8
                     color: Theme.surfaceVariantText
                 }
 
@@ -472,15 +472,15 @@ PopoutComponent {
                 }
 
                 Rectangle {
-                    width: 24
-                    height: 24
-                    radius: 12
+                    width: Theme.iconSize ? Theme.iconSize + 4 : 24
+                    height: Theme.iconSize ? Theme.iconSize + 4 : 24
+                    radius: (Theme.iconSize ? Theme.iconSize + 4 : 24) / 2
                     color: mouseRefresh.containsMouse ? Theme.surfaceContainerHighest : "transparent"
 
                     DankIcon {
                         anchors.centerIn: parent
                         name: "refresh"
-                        size: 16
+                        size: (Theme.iconSize ? Theme.iconSize : 20) * 0.8
                         color: Theme.primary
                     }
 

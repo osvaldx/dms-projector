@@ -7,7 +7,7 @@ PluginSettings {
     id: root
     pluginId: "dmsProjector"
 
-    property string currentLanguage: "es"
+    property string currentLanguage: "en"
 
     Component.onCompleted: {
         updateLanguage();
@@ -30,7 +30,7 @@ PluginSettings {
 
     function updateLanguage() {
         if (root.pluginService) {
-            root.currentLanguage = root.pluginService.loadPluginData(root.pluginId, "language", "es");
+            root.currentLanguage = root.pluginService.loadPluginData(root.pluginId, "language", "en");
         }
     }
 
@@ -48,8 +48,8 @@ PluginSettings {
             "optAbove": "Arriba",
             "optBelow": "Abajo",
             "behaviorHeader": "Comportamiento",
-            "autoKeybindLabel": "Atajo Global Automático (Win + P)",
-            "autoKeybindDesc": "Configura automáticamente la combinación Super + P en Hyprland / Niri / Sway.",
+            "autoKeybindLabel": "Atajo Global (Super + P)",
+            "autoKeybindDesc": "Habilita la combinación Super + P en Hyprland para abrir el menú.",
             "showNotificationsLabel": "Mostrar Notificaciones",
             "showNotificationsDesc": "Muestra una notificación OSD al cambiar el modo de proyección.",
             "hideWhenNoExternalLabel": "Ocultar si no hay pantalla externa",
@@ -73,8 +73,8 @@ PluginSettings {
             "optAbove": "Above",
             "optBelow": "Below",
             "behaviorHeader": "Behavior",
-            "autoKeybindLabel": "Automatic Global Shortcut (Win + P)",
-            "autoKeybindDesc": "Automatically bind Super + P in Hyprland / Niri / Sway upon installation.",
+            "autoKeybindLabel": "Global Shortcut (Super + P)",
+            "autoKeybindDesc": "Enable the Super + P keybind in Hyprland to open the menu.",
             "showNotificationsLabel": "Show Notifications",
             "showNotificationsDesc": "Display a system notification when changing projection mode.",
             "hideWhenNoExternalLabel": "Hide when no external display",
@@ -127,10 +127,10 @@ PluginSettings {
         settingKey: "language"
         label: root.t("languageLabel")
         description: root.t("languageDesc")
-        defaultValue: "es"
+        defaultValue: "en"
         options: [
-            { label: "Español", value: "es" },
-            { label: "English", value: "en" }
+            { label: "English", value: "en" },
+            { label: "Español", value: "es" }
         ]
     }
 
@@ -166,7 +166,7 @@ PluginSettings {
         settingKey: "autoKeybind"
         label: root.t("autoKeybindLabel")
         description: root.t("autoKeybindDesc")
-        defaultValue: true
+        defaultValue: false
     }
 
     ToggleSetting {

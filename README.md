@@ -36,9 +36,8 @@ dms restart
 
 ## Shortcut (Win + P)
 
-The plugin automatically configures the Super + P shortcut upon installation.
+You can enable the automatic `Super + P` shortcut from the plugin settings, or configure it manually:
 
-If you prefer to configure it manually:
 - Hyprland: `dms keybinds set hyprland "SUPER + P" "exec dms ipc call widget toggle dmsProjector"`
 - Niri: `dms keybinds set niri "Mod+P" "exec dms ipc call widget toggle dmsProjector"`
 - Sway: `dms keybinds set sway "Mod4+p" "exec dms ipc call widget toggle dmsProjector"`
@@ -49,9 +48,9 @@ Available in DankMaterialShell Settings > Plugins > DMS Projector:
 
 | Setting | Options | Default | Description |
 |---|---|---|---|
-| Language | Español, English | Español | Interface and notification language |
+| Language | English, Español | English | Interface and notification language |
 | Extended Direction | Right, Left, Above, Below | Right | Placement of external screen |
-| Automatic Shortcut | true / false | true | Auto-register Win + P |
+| Automatic Shortcut | true / false | false (opt-in) | Auto-register Win + P shortcut |
 | Show Notifications | true / false | true | Desktop notification on mode switch |
 | Hide when no external | true / false | false | Hide bar icon when no external display is connected |
 | Primary Output Override | Text (e.g. eDP-1) | Auto-detect | Manually set primary screen name |
